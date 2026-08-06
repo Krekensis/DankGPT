@@ -1,0 +1,7 @@
+data/*
+
+GOAL.md
+.agents/*
+__pycache__
+
+.env
