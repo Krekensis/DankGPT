@@ -47,8 +47,8 @@ def chat_endpoint(req: ChatRequest):
     try:
         # 1. Get Embedding from Hugging Face
         embedding_data = get_hf_embedding(user_question)
-        # HF Inference API returns a list of floats
-        query_vector = embedding_data
+        # HF Inference API returns [[float, ...]] for a single string input
+        query_vector = embedding_data[0] if isinstance(embedding_data[0], list) else embedding_data
         
         # 2. Search Pinecone Official Namespace
         off_res = index.query(
