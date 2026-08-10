@@ -1,3 +1,0 @@
-python-dotenv
-vllm
-huggingface_hub

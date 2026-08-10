@@ -1,0 +1,4 @@
+fastapi
+pinecone-client
+groq
+requests
