@@ -5,3 +5,5 @@ GOAL.md
 __pycache__
 
 .env
+.vercel
+.env*

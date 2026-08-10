@@ -1,0 +1,7 @@
+{
+  "name": "dankgpt-root",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm install && npx vite build --outDir ../public --emptyOutDir"
+  }
+}
