@@ -1,5 +1,4 @@
 import os
-import json
 import requests
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -8,95 +7,71 @@ from groq import Groq
 
 app = FastAPI(title="DankGPT Serverless API")
 
-# Setup Environment Variables (Vercel will inject these)
 PINECONE_KEY = os.environ.get("PINECONE_KEY")
-HF_TOKEN = os.environ.get("HF_TOKEN")
-GROQ_KEY = os.environ.get("GROQ_KEY")
+HF_TOKEN     = os.environ.get("HF_TOKEN")
+GROQ_KEY     = os.environ.get("GROQ_KEY")
 
-# Initialize Pinecone and Groq
-pc = None
-index = None
-if PINECONE_KEY:
-    pc = Pinecone(api_key=PINECONE_KEY)
-    index = pc.Index("dankgpt")
+pc    = Pinecone(api_key=PINECONE_KEY) if PINECONE_KEY else None
+index = pc.Index("dankgpt")            if pc           else None
+groq_client = Groq(api_key=GROQ_KEY)  if GROQ_KEY     else None
 
-if GROQ_KEY:
-    groq_client = Groq(api_key=GROQ_KEY)
-
-# Hugging Face Inference API details
 HF_API_URL = "https://api-inference.huggingface.co/models/BAAI/bge-large-en-v1.5"
 
 class ChatRequest(BaseModel):
     question: str
 
-def get_hf_embedding(text: str):
+def get_hf_embedding(text: str) -> list:
+    """Call HF Inference API. Returns a clear error if the model is still loading."""
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    payload = {"inputs": text}
-    response = requests.post(HF_API_URL, headers=headers, json=payload)
-    if response.status_code != 200:
-        raise Exception(f"Hugging Face API Error: {response.text}")
-    return response.json()
+    resp = requests.post(HF_API_URL, headers=headers, json={"inputs": text}, timeout=8)
+    if resp.status_code == 503:
+        raise Exception("The embedding model is warming up. Please try again in ~30 seconds.")
+    if resp.status_code != 200:
+        raise Exception(f"HF API error {resp.status_code}: {resp.text}")
+    data = resp.json()
+    # HF feature-extraction returns [[float, ...]] for a single string
+    return data[0] if isinstance(data[0], list) else data
 
 @app.post("/api/chat")
 def chat_endpoint(req: ChatRequest):
     if not (PINECONE_KEY and HF_TOKEN and GROQ_KEY):
-        raise HTTPException(status_code=500, detail="Missing API Keys on Vercel Server.")
-    
-    user_question = req.question
+        raise HTTPException(status_code=500, detail="Missing API Keys. Check Vercel Environment Variables.")
 
     try:
-        # 1. Get Embedding from Hugging Face
-        embedding_data = get_hf_embedding(user_question)
-        # HF Inference API returns [[float, ...]] for a single string input
-        query_vector = embedding_data[0] if isinstance(embedding_data[0], list) else embedding_data
-        
-        # 2. Search Pinecone Official Namespace
-        off_res = index.query(
-            namespace="official",
-            vector=query_vector,
-            top_k=5,
-            include_metadata=True
-        )
-        
-        # 3. Search Pinecone Community Namespace
-        com_res = index.query(
-            namespace="community",
-            vector=query_vector,
-            top_k=5,
-            include_metadata=True
-        )
-        
-        # Format Context
-        official_context = ""
-        for match in off_res.get('matches', []):
-            official_context += match['metadata'].get('raw_data', '') + "\n\n"
-            
-        community_context = ""
-        for match in com_res.get('matches', []):
-            community_context += match['metadata'].get('raw_data', '') + "\n\n"
+        # 1. Embed the question
+        query_vector = get_hf_embedding(req.question)
 
-        # 4. Generate LLM Response with Groq
+        # 2. Search Pinecone — both namespaces
+        # Pinecone SDK v3 returns QueryResponse objects, access via .matches (not .get())
+        off_matches = index.query(namespace="official",  vector=query_vector, top_k=5, include_metadata=True).matches
+        com_matches = index.query(namespace="community", vector=query_vector, top_k=5, include_metadata=True).matches
+
+        # 3. Build context — each match is a ScoredVector, metadata is a plain dict
+        official_context  = "\n\n".join(m.metadata.get("raw_data", "") for m in off_matches)
+        community_context = "\n\n".join(m.metadata.get("raw_data", "") for m in com_matches)
+
+        # 4. Ask Groq
         prompt = f"""You are DankGPT, an expert AI assistant for the Dank Memer Discord Bot.
 Your goal is to answer the user's question accurately, concisely, and with a friendly tone.
 
-You will be provided with two sources of context to answer the question:
-1. [OFFICIAL FACTS]: This is data extracted directly from the game's API and official guides. This information is 100% accurate. You MUST prioritize this information above all else.
-2. [COMMUNITY RUMORS]: These are messages extracted from the community Discord server. This information might be outdated, subjective, or factually incorrect. ONLY use this information if the Official Facts do not fully answer the question. If you use Community Rumors, you MUST warn the user that the information is based on community speculation.
+You will be provided with two sources of context:
+1. [GUIDE FACTS]: Extracted directly from guides. 100% accurate. Prioritize this above all else.
+2. [COMMUNITY RUMORS]: Messages from the Discord community. May be outdated or wrong. Only use if GUIDE FACTS are insufficient, and warn the user.
 
 CRITICAL INSTRUCTIONS:
-- NEVER hallucinate or make up information. If the answer cannot be deduced from the provided context, explicitly state "I don't have enough information to answer that."
-- FORMATTING: Use Discord-flavored Markdown (bolding, italics, bullet points) to make your response easy to read.
-- Be concise and directly address the user's question.
-- PROVIDE EXACT DETAILS: Never give vague or obvious answers. You MUST extract and provide specific quantities, exact amounts, drop rates, and exact command syntaxes if they are present in the Context. Be highly analytical.
+- NEVER hallucinate. If the answer cannot be found in the context, say "I don't have enough information to answer that."
+- FORMATTING: Use Markdown (bold, italics, bullet points) for readability.
+- Be concise and directly address the question.
+- PROVIDE EXACT DETAILS: Extract specific quantities, exact amounts, drop rates, and command syntaxes from the context.
 
-[OFFICIAL FACTS]
-{official_context}
+[GUIDE FACTS]
+{official_context or "No official data found."}
 
 [COMMUNITY RUMORS]
-{community_context}
+{community_context or "No community data found."}
 
 [USER QUESTION]
-{user_question}
+{req.question}
 """
         completion = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
@@ -104,6 +79,8 @@ CRITICAL INSTRUCTIONS:
             temperature=0.2,
         )
         return {"response": completion.choices[0].message.content}
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
