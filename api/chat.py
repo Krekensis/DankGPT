@@ -1,5 +1,5 @@
 import os
-import requests
+from huggingface_hub import InferenceClient
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from pinecone import Pinecone
@@ -7,9 +7,9 @@ from groq import Groq
 
 app = FastAPI(title="DankGPT Serverless API")
 
-PINECONE_KEY = os.environ.get("PINECONE_KEY")
-HF_TOKEN     = os.environ.get("HF_TOKEN")
-GROQ_KEY     = os.environ.get("GROQ_KEY")
+PINECONE_KEY = os.environ.get("PINECONE_KEY", "").strip() or None
+HF_TOKEN     = os.environ.get("HF_TOKEN", "").strip() or None
+GROQ_KEY     = os.environ.get("GROQ_KEY", "").strip() or None
 
 pc    = Pinecone(api_key=PINECONE_KEY) if PINECONE_KEY else None
 index = pc.Index("dankgpt")            if pc           else None
@@ -20,17 +20,20 @@ HF_API_URL = "https://api-inference.huggingface.co/models/BAAI/bge-large-en-v1.5
 class ChatRequest(BaseModel):
     question: str
 
-def get_hf_embedding(text: str) -> list:
+def get_hf_embedding(text: str, retries: int = 3) -> list:
     """Call HF Inference API. Returns a clear error if the model is still loading."""
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    resp = requests.post(HF_API_URL, headers=headers, json={"inputs": text}, timeout=45)
-    if resp.status_code == 503:
-        raise Exception("The embedding model is warming up. Please try again in ~30 seconds.")
-    if resp.status_code != 200:
-        raise Exception(f"HF API error {resp.status_code}: {resp.text}")
-    data = resp.json()
-    # HF feature-extraction returns [[float, ...]] for a single string
-    return data[0] if isinstance(data[0], list) else data
+    client = InferenceClient(api_key=HF_TOKEN)
+    
+    for attempt in range(retries):
+        try:
+            vector = client.feature_extraction(text=text, model="BAAI/bge-large-en-v1.5")
+            # Usually returns a numpy array or list
+            return vector.tolist() if hasattr(vector, 'tolist') else vector
+        except Exception as e:
+            if attempt == retries - 1:
+                raise Exception(f"Error connecting to HuggingFace after {retries} attempts: {e}")
+            import time
+            time.sleep(1) # wait a second before retrying
 
 @app.post("/api/chat")
 def chat_endpoint(req: ChatRequest):
