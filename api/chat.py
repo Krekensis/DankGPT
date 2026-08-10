@@ -23,7 +23,7 @@ class ChatRequest(BaseModel):
 def get_hf_embedding(text: str) -> list:
     """Call HF Inference API. Returns a clear error if the model is still loading."""
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    resp = requests.post(HF_API_URL, headers=headers, json={"inputs": text}, timeout=8)
+    resp = requests.post(HF_API_URL, headers=headers, json={"inputs": text}, timeout=45)
     if resp.status_code == 503:
         raise Exception("The embedding model is warming up. Please try again in ~30 seconds.")
     if resp.status_code != 200:
