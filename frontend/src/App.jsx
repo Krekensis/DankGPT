@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { GradFlow } from 'gradflow';
 
 // ─── SVG Icon Components ──────────────────────────────────────────────────────
 
@@ -235,21 +234,6 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* ── Ambient Background ── */}
-      <div className="ambient-bg">
-        <GradFlow
-          config={{
-            color1: { r: 7, g: 23, b: 7 },
-            color2: { r: 10, g: 15, b: 10 },
-            color3: { r: 11, g: 25, b: 11 },
-            speed: 0.9,
-            scale: 1.2,
-            type: 'animated',
-            noise: 0.15
-          }}
-        />
-      </div>
-
       {/* ── Header ── */}
       <header className="header">
         <div className="header-inner">
