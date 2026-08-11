@@ -1,20 +1,10 @@
 {
   "version": 2,
   "outputDirectory": "dist",
-  "functions": {
-    "api/chat.py": { "maxDuration": 50 }
-  },
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "api/chat.py"
-    },
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

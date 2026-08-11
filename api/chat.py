@@ -1,11 +1,21 @@
 import os
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pinecone import Pinecone
 from groq import Groq
 
 app = FastAPI(title="DankGPT Serverless API")
+
+# Add CORS middleware to allow requests from the Vercel frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins (localhost and vercel domain)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 PINECONE_KEY = os.environ.get("PINECONE_KEY", "").strip() or None
 HF_TOKEN     = os.environ.get("HF_TOKEN", "").strip() or None
@@ -16,7 +26,6 @@ index = pc.Index("dankgpt")            if pc           else None
 groq_client = Groq(api_key=GROQ_KEY)  if GROQ_KEY     else None
 
 from huggingface_hub import InferenceClient
-
 class MessageItem(BaseModel):
     role: str
     content: str

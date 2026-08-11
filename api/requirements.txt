@@ -3,3 +3,4 @@ pinecone
 groq
 huggingface-hub
 numpy
+uvicorn
