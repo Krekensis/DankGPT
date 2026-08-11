@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "gradflow": "^0.2.0",
+    "modgrad": "^0.1.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",

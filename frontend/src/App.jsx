@@ -1,57 +1,60 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { GradFlow } from 'gradflow';
 
 // ─── SVG Icon Components ──────────────────────────────────────────────────────
 
 const SendIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="m22 2-7 20-4-9-9-4Z"/>
-    <path d="M22 2 11 13"/>
+    <path d="m22 2-7 20-4-9-9-4Z" />
+    <path d="M22 2 11 13" />
+  </svg>
+);
+
+const ReplyIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 14 4 9l5-5" />
+    <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11" />
   </svg>
 );
 
 const CopyIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
-    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+    <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
   </svg>
 );
 
 const CheckIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 6 9 17l-5-5"/>
+    <path d="M20 6 9 17l-5-5" />
   </svg>
 );
 
 const RefreshIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-    <path d="M21 3v5h-5"/>
-    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-    <path d="M8 16H3v5"/>
+    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+    <path d="M21 3v5h-5" />
+    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+    <path d="M8 16H3v5" />
   </svg>
 );
 
-const LogoMark = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 2a5 5 0 0 1 5 5c0 2.5-1.5 4.5-3.5 5.4V14h-3v-1.6C8.5 11.5 7 9.5 7 7a5 5 0 0 1 5-5z"/>
-    <path d="M9 14v2a3 3 0 0 0 6 0v-2"/>
-  </svg>
-);
+
 
 // ─── Suggested Prompts ────────────────────────────────────────────────────────
 
 const SUGGESTED_PROMPTS = [
-  "What's the best way to grind coins in Dank Memer?",
-  "How do adventure rewards work?",
-  "What items should I buy first from the shop?",
-  "How does the pet system work?",
+  "What is the exact drop rate of a God Box?",
+  "How many coins does a Pepe Trophy cost?",
+  "What are the precise odds for winning blackjack?",
+  "Show me the stats and commands for a Kraken pet.",
 ];
 
 // ─── Message Actions (Copy / Regenerate) ─────────────────────────────────────
 
-function MessageActions({ content, onRegenerate, isLast }) {
+function MessageActions({ content, onRegenerate, onReply, isLast }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
@@ -66,6 +69,10 @@ function MessageActions({ content, onRegenerate, isLast }) {
       <button onClick={handleCopy} className="msg-action-btn" title="Copy">
         {copied ? <CheckIcon /> : <CopyIcon />}
         <span>{copied ? 'Copied' : 'Copy'}</span>
+      </button>
+      <button onClick={onReply} className="msg-action-btn" title="Follow-up">
+        <ReplyIcon />
+        <span>Reply</span>
       </button>
       {isLast && (
         <button onClick={onRegenerate} className="msg-action-btn" title="Regenerate">
@@ -98,13 +105,17 @@ const mdComponents = {
   img: ({ node, ...props }) => (
     <img {...props} style={{ display: 'inline', width: 20, height: 20, verticalAlign: 'middle', margin: '0 2px' }} />
   ),
-  code: ({ node, inline, className, children, ...props }) => {
-    if (inline) {
+  code: ({ node, className, children, ...props }) => {
+    const match = /language-(\w+)/.exec(className || '');
+    // If it has a language class or contains newlines, treat it as a block
+    const isBlock = match || String(children).includes('\n');
+
+    if (!isBlock) {
       return <code className="inline-code" {...props}>{children}</code>;
     }
     return (
       <div className="code-block">
-        <pre><code {...props}>{children}</code></pre>
+        <pre><code className={className} {...props}>{children}</code></pre>
       </div>
     );
   },
@@ -116,6 +127,8 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [followUpContext, setFollowUpContext] = useState(null);
+
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const lastUserQuestion = useRef('');
@@ -132,19 +145,33 @@ export default function App() {
     el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   }, [input]);
 
-  const sendMessage = useCallback(async (question) => {
+  const sendMessage = useCallback(async (question, overrideContext = null) => {
     if (!question.trim() || isLoading) return;
 
     lastUserQuestion.current = question;
-    setMessages(prev => [...prev, { role: 'user', content: question }]);
+
+    // Determine payload based on followUpContext or override
+    const contextToUse = overrideContext !== null ? overrideContext : followUpContext;
+    let payloadMessages = [{ role: 'user', content: question }];
+    if (contextToUse) {
+      payloadMessages = [...contextToUse, { role: 'user', content: question }];
+    }
+
+    // Always append to visual UI chat history
+    setMessages(prev => [...prev, {
+      role: 'user',
+      content: question,
+      replyTo: contextToUse ? contextToUse[1].content : null
+    }]);
     setInput('');
     setIsLoading(true);
+    setFollowUpContext(null); // Clear context after sending
 
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ messages: payloadMessages }),
       });
 
       let errorMessage = `Server error (${response.status})`;
@@ -152,7 +179,7 @@ export default function App() {
         try {
           const errData = await response.json();
           if (errData.detail) errorMessage = errData.detail;
-        } catch (_) {}
+        } catch (_) { }
         throw new Error(errorMessage);
       }
 
@@ -167,7 +194,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading]);
+  }, [isLoading, followUpContext]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -182,18 +209,54 @@ export default function App() {
   };
 
   const handleRegenerate = () => {
+    // Regenerate uses the full UI history minus the last assistant message
     setMessages(prev => prev.slice(0, -1));
-    sendMessage(lastUserQuestion.current);
+    // For regenerate, we just use the last question, ignoring any previous threaded context
+    sendMessage(lastUserQuestion.current, null);
   };
 
   const isEmpty = messages.length === 0;
 
+  const handleReplyClick = (idx) => {
+    // Find the closest user message before this assistant message
+    let userMsg = null;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        userMsg = messages[i];
+        break;
+      }
+    }
+
+    if (userMsg && messages[idx]) {
+      setFollowUpContext([userMsg, messages[idx]]);
+      textareaRef.current?.focus();
+    }
+  };
+
   return (
     <div className="app">
+      {/* ── Ambient Background ── */}
+      <div className="ambient-bg">
+        <GradFlow
+          config={{
+            color1: { r: 7, g: 23, b: 7 },
+            color2: { r: 10, g: 15, b: 10 },
+            color3: { r: 11, g: 25, b: 11 },
+            speed: 0.9,
+            scale: 1.2,
+            type: 'animated',
+            noise: 0.15
+          }}
+        />
+      </div>
+
       {/* ── Header ── */}
       <header className="header">
         <div className="header-inner">
-          <span className="brand-name">DankGPT</span>
+          <div className="header-brand-group">
+            <img src="/DankGPT.png" alt="DankGPT Logo" className="header-logo" />
+            <span className="brand-name">DankGPT</span>
+          </div>
         </div>
       </header>
 
@@ -204,9 +267,6 @@ export default function App() {
           {/* Empty state */}
           {isEmpty && (
             <div className="empty-state">
-              <div className="empty-logo">
-                <LogoMark />
-              </div>
               <h1 className="empty-heading">How can I help you?</h1>
               <p className="empty-sub">Ask anything about the Dank Memer Discord bot.</p>
               <div className="suggestions">
@@ -230,7 +290,14 @@ export default function App() {
             return (
               <div key={idx} className={`message message--${msg.role}${msg.isError ? ' message--error' : ''}`}>
                 {msg.role === 'user' ? (
-                  <div className="user-bubble">{msg.content}</div>
+                  <div className="user-message-container">
+                    {msg.replyTo && (
+                      <div className="user-reply-badge">
+                        <ReplyIcon /> Replying to: "{msg.replyTo.substring(0, 50)}..."
+                      </div>
+                    )}
+                    <div className="user-bubble">{msg.content}</div>
+                  </div>
                 ) : (
                   <div className="assistant-content">
                     <div className="prose">
@@ -242,6 +309,7 @@ export default function App() {
                       <MessageActions
                         content={msg.content}
                         onRegenerate={handleRegenerate}
+                        onReply={() => handleReplyClick(idx)}
                         isLast={isLastAssistant && !isLoading}
                       />
                     )}
@@ -267,7 +335,14 @@ export default function App() {
       {/* ── Composer ── */}
       <div className="composer-wrap">
         <div className="composer-inner">
-          <form className="composer" onSubmit={handleSubmit}>
+          {followUpContext && (
+            <div className="reply-indicator">
+              <span className="reply-label"><ReplyIcon /> Replying to context</span>
+              <span className="reply-snippet">"{followUpContext[1].content.substring(0, 40)}..."</span>
+              <button className="reply-cancel" onClick={() => setFollowUpContext(null)}>✕</button>
+            </div>
+          )}
+          <form className={`composer ${followUpContext ? 'composer--replying' : ''}`} onSubmit={handleSubmit}>
             <textarea
               ref={textareaRef}
               className="composer-input"
@@ -277,6 +352,7 @@ export default function App() {
               disabled={isLoading}
               placeholder="Ask about Dank Memer…"
               rows={1}
+              maxLength={500}
             />
             <button
               type="submit"

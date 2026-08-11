@@ -1,5 +1,4 @@
 fastapi
 pinecone
 groq
-httpx
 huggingface-hub
