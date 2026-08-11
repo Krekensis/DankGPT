@@ -224,7 +224,7 @@ body {
   padding: 20px 0;
 }
 
-.message+.message {
+.message+.message--user {
   border-top: 1px solid var(--border);
 }
 
@@ -436,6 +436,12 @@ body {
 
 .message--assistant:hover .msg-actions {
   opacity: 1;
+}
+
+@media (hover: none) {
+  .msg-actions {
+    opacity: 1;
+  }
 }
 
 .msg-action-btn {
@@ -664,6 +670,10 @@ body {
 
   .composer-wrap {
     padding: 12px 16px 16px;
+  }
+
+  .hide-on-mobile {
+    display: none;
   }
 }
 

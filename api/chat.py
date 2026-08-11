@@ -8,10 +8,9 @@ from groq import Groq
 
 app = FastAPI(title="DankGPT Serverless API")
 
-# Add CORS middleware to allow requests from the Vercel frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins (localhost and vercel domain)
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,7 +39,6 @@ def get_hf_embedding(text: str, retries: int = 3) -> list:
     for attempt in range(retries):
         try:
             vector = client.feature_extraction(text=text, model="BAAI/bge-large-en-v1.5")
-            # Convert to list if it's a numpy array, or return directly if already a list
             return vector.tolist() if hasattr(vector, 'tolist') else vector
         except Exception as e:
             if attempt == retries - 1:
@@ -55,8 +53,6 @@ def chat_endpoint(req: ChatRequest):
 
 
     try:
-        # Combine all user messages in the thread to form a highly contextual search query
-        # (e.g. "how to get jormungandr?" + "which location is it available at?")
         search_query = " ".join([m.content for m in req.messages if m.role == "user"])
         if not search_query.strip():
             raise HTTPException(status_code=400, detail="Message content cannot be empty.")
@@ -67,17 +63,36 @@ def chat_endpoint(req: ChatRequest):
         # 1. Embed the combined contextual query
         query_vector = get_hf_embedding(search_query)
 
-        # 2. Search Pinecone — both namespaces
-        # Reduced top_k to 3 (total 6 documents) to comfortably stay under the 6,000 token limit
+        # 2. Search Pinecone — fetch up to 3 documents per namespace
         off_matches = index.query(namespace="official",  vector=query_vector, top_k=3, include_metadata=True).matches
         com_matches = index.query(namespace="community", vector=query_vector, top_k=3, include_metadata=True).matches
 
-        # 3. Build context
-        official_context  = "\n\n".join(m.metadata.get("raw_data", "") for m in off_matches)
-        community_context = "\n\n".join(m.metadata.get("raw_data", "") for m in com_matches)
+        def get_dynamic_docs(off_docs, com_docs, max_chars):
+            """Dynamically selects as many interleaved documents as fit within the character limit."""
+            selected_off, selected_com = [], []
+            current_chars = 0
+            
+            max_len = max(len(off_docs), len(com_docs))
+            for i in range(max_len):
+                if i < len(off_docs):
+                    doc_len = len(off_docs[i].metadata.get("raw_data", ""))
+                    if current_chars + doc_len < max_chars:
+                        selected_off.append(off_docs[i])
+                        current_chars += doc_len
+                        
+                if i < len(com_docs):
+                    doc_len = len(com_docs[i].metadata.get("raw_data", ""))
+                    if current_chars + doc_len < max_chars:
+                        selected_com.append(com_docs[i])
+                        current_chars += doc_len
+                        
+            return selected_off, selected_com
 
-        # 4. Ask Groq
-        system_prompt = f"""You are DankGPT, an expert AI assistant for the Dank Memer Discord Bot.
+        def build_groq_messages(off_docs, com_docs):
+            official_context  = "\n\n".join(" ".join(m.metadata.get("raw_data", "").split()) for m in off_docs)
+            community_context = "\n\n".join(" ".join(m.metadata.get("raw_data", "").split()) for m in com_docs)
+            
+            system_prompt = f"""You are DankGPT, an expert AI assistant for the Dank Memer Discord Bot.
 Your goal is to answer the user's question accurately, concisely, and with a friendly tone.
 
 You will be provided with two sources of context:
@@ -98,29 +113,33 @@ CRITICAL INSTRUCTIONS:
 [COMMUNITY RUMORS]
 {community_context or "No community data found."}
 """
-        
-        # Build conversation history for Groq
-        groq_messages = [{"role": "system", "content": system_prompt}]
-        for msg in req.messages:
-            groq_messages.append({"role": msg.role, "content": msg.content})
+            messages = [{"role": "system", "content": system_prompt}]
+            for msg in req.messages:
+                messages.append({"role": msg.role, "content": msg.content})
+            return messages
 
         import groq
         try:
-            # Try the larger, more capable model first
+            # 70B Model: Stricter limit of 15,000 chars (approx 3,750 tokens) to save daily allowance
+            off_70b, com_70b = get_dynamic_docs(off_matches, com_matches, 15000)
             completion = groq_client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
-                messages=groq_messages,
+                messages=build_groq_messages(off_70b, com_70b),
                 temperature=0.1,
             )
         except groq.RateLimitError:
-            # Fallback to the smaller model if tokens per day/minute are consumed
+            # 8B Fallback: Stricter limit of ~20,000 chars (approx 5,000 tokens) to ensure it never crashes
+            off_8b, com_8b = get_dynamic_docs(off_matches, com_matches, 20000)
             completion = groq_client.chat.completions.create(
                 model="llama-3.1-8b-instant",
-                messages=groq_messages,
+                messages=build_groq_messages(off_8b, com_8b),
                 temperature=0.1,
             )
-        
-        return {"response": completion.choices[0].message.content}
+        return {
+            "response": completion.choices[0].message.content,
+            "tokens": completion.usage.total_tokens,
+            "model": completion.model
+        }
 
     except HTTPException:
         raise
