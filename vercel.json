@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "outputDirectory": "dist",
   "functions": {
     "api/chat.py": { "maxDuration": 50 }
   },
