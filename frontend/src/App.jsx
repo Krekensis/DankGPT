@@ -45,10 +45,10 @@ const RefreshIcon = () => (
 // ─── Suggested Prompts ────────────────────────────────────────────────────────
 
 const SUGGESTED_PROMPTS = [
-  "Give information of XP multipliers.",
-  "What are Sunbear's D20 outcomes?",
-  "How to get diamonds from farming?",
-  "Show me the stats and commands for a Kraken pet.",
+  "How do I maximize my XP multipliers?",
+  "What are the possible outcomes for Sunbear's D20?",
+  "What's the method to get diamonds from farming?",
+  "Show me the stats and abilities for the Kraken pet.",
 ];
 
 // ─── Message Actions (Copy / Regenerate) ─────────────────────────────────────
