@@ -95,11 +95,22 @@ CRITICAL INSTRUCTIONS:
         for msg in req.messages:
             groq_messages.append({"role": msg.role, "content": msg.content})
 
-        completion = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=groq_messages,
-            temperature=0.1,
-        )
+        import groq
+        try:
+            # Try the larger, more capable model first
+            completion = groq_client.chat.completions.create(
+                model="llama-3.1-70b-versatile",
+                messages=groq_messages,
+                temperature=0.1,
+            )
+        except groq.RateLimitError:
+            # Fallback to the smaller model if tokens per day/minute are consumed
+            completion = groq_client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=groq_messages,
+                temperature=0.1,
+            )
+        
         return {"response": completion.choices[0].message.content}
 
     except HTTPException:

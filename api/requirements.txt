@@ -2,3 +2,4 @@ fastapi
 pinecone
 groq
 huggingface-hub
+numpy
