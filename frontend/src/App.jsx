@@ -45,9 +45,9 @@ const RefreshIcon = () => (
 // ─── Suggested Prompts ────────────────────────────────────────────────────────
 
 const SUGGESTED_PROMPTS = [
-  "What is the exact drop rate of a God Box?",
-  "How many coins does a Pepe Trophy cost?",
-  "What are the precise odds for winning blackjack?",
+  "Give information of XP multipliers.",
+  "What are Sunbear's D20 outcomes?",
+  "How to get diamonds from farming?",
   "Show me the stats and commands for a Kraken pet.",
 ];
 
