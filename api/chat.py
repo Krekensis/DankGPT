@@ -99,7 +99,7 @@ CRITICAL INSTRUCTIONS:
         try:
             # Try the larger, more capable model first
             completion = groq_client.chat.completions.create(
-                model="llama-3.1-70b-versatile",
+                model="llama-3.3-70b-versatile",
                 messages=groq_messages,
                 temperature=0.1,
             )
