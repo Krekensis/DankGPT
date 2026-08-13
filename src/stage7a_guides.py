@@ -7,7 +7,7 @@ GUIDES_DIR = "data/guides"
 OUTPUT_FILE = "data/extracted-split/guides_knowledge.jsonl"
 
 def clean_discord_text(text):
-    # Convert custom Discord emojis like <:DankCoin:1470569275268796487> into "DankCoin"
+    # Strip emojis for the embedding model so it only sees clean text
     text = re.sub(r'<a?:([^:]+):\d+>', r'\1', text)
     return text.strip()
 
@@ -35,21 +35,23 @@ def process_guides():
         
         clean_content = clean_discord_text(content)
         
-        # Split large guides by Header 2 (##) so they fit inside the Embedding model's token limits
-        sections = re.split(r'(?=^## )', clean_content, flags=re.MULTILINE)
+        # Split both the clean and raw content by Header 2 (##)
+        clean_sections = re.split(r'(?=^## )', clean_content, flags=re.MULTILINE)
+        raw_sections = re.split(r'(?=^## )', content, flags=re.MULTILINE)
         
-        # Filter out empty sections first so enumeration starts at 0 (Part 1) correctly
-        valid_sections = [s.strip() for s in sections if s.strip()]
+        # Filter out empty sections
+        valid_clean = [s.strip() for s in clean_sections if s.strip()]
+        valid_raw = [s.strip() for s in raw_sections if s.strip()]
         
-        for i, section in enumerate(valid_sections):
-            topic_suffix = f" (Part {i+1})" if len(valid_sections) > 1 else ""
+        for i, (clean_section, raw_section) in enumerate(zip(valid_clean, valid_raw)):
+            topic_suffix = f" (Part {i+1})" if len(valid_clean) > 1 else ""
                 
             knowledge_items.append({
                 "topic": f"Guide: {name}{topic_suffix}",
-                "knowledge": f"Official Guide - {name}:\n\n{section}",
+                "knowledge": f"Official Guide - {name}:\n\n{clean_section}",
                 "category": "Guides",
                 "confidence": "high",
-                "raw_data": {"filename": os.path.basename(fpath), "raw_text": section}
+                "raw_data": {"filename": os.path.basename(fpath), "raw_text": raw_section}
             })
         
     print(f"Processed {len(knowledge_items)} guide chunks.")

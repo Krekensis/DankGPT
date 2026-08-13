@@ -28,7 +28,7 @@ def process_items(data):
         flavor = item.get("flavor", "")
         details = item.get("details", "")
         
-        knowledge = f"{name} is a {rarity} {type_} item. Base value is {value}. Net value is {net}. Flavor text: {flavor} Details: {details}".strip()
+        knowledge = f"{name} is a {rarity} {type_} item. Base value is {net}. Flavor text: {flavor} Details: {details}".strip()
         knowledge_items.append({
             "topic": f"Item: {name}",
             "knowledge": knowledge,

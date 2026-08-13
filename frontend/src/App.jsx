@@ -47,7 +47,95 @@ const LlamaIcon = () => (
 );
 
 
+const ChevronIcon = ({ isOpen }) => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 150ms ease' }}>
+    <path d="m9 18 6-6-6-6" />
+  </svg>
+);
 
+const LoaderIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="think-loader">
+    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+  </svg>
+);
+
+function ThoughtProcessBlock({ msg }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    // Intentionally removed auto-open logic so the block stays closed by default.
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) {
+          setIsOpen(false);
+        }
+      });
+    }, { threshold: 0.1 });
+
+    observer.observe(el);
+    return () => observer.unobserve(el);
+  }, []);
+
+  const toggleOpen = () => setIsOpen(prev => !prev);
+
+  const title = msg.isStreaming && msg.statusLogs?.length > 0 
+    ? msg.statusLogs[msg.statusLogs.length - 1] 
+    : "Thought Process";
+
+  return (
+    <div className="think-block" ref={containerRef}>
+      <button className="think-summary" onClick={toggleOpen}>
+        <ChevronIcon isOpen={isOpen} />
+        {msg.isStreaming && <LoaderIcon />}
+        <span>{title}</span>
+      </button>
+      <div className={`think-content-wrapper ${isOpen ? 'is-open' : ''}`}>
+        <div className="think-content-inner">
+          <div className="think-content">
+            {msg.statusLogs?.length > 0 && (
+              <ul className="status-logs">
+                {msg.statusLogs.map((log, i) => (
+                  <li key={i}>{log}</li>
+                ))}
+              </ul>
+            )}
+            {msg.contextDocs && (
+              <div className="context-docs">
+                {msg.contextDocs.official?.length > 0 && (
+                  <div className="context-section">
+                    <div className="context-title">Guide data:</div>
+                    <ul>
+                      {msg.contextDocs.official.map((doc, i) => (
+                        <li key={i}>{doc.substring(0, 150)}...</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {msg.contextDocs.community?.length > 0 && (
+                  <div className="context-section">
+                    <div className="context-title">Community data:</div>
+                    <ul>
+                      {msg.contextDocs.community.map((doc, i) => (
+                        <li key={i}>{doc.substring(0, 150)}...</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Suggested Prompts ────────────────────────────────────────────────────────
 
@@ -112,15 +200,73 @@ function TypingIndicator() {
 
 // ─── Markdown Renderer ────────────────────────────────────────────────────────
 
-const parseEmojis = (text) =>
-  text.replace(/<:([a-zA-Z0-9_]+):(\d+)>/g, (_, name, id) =>
-    `![${name}](https://cdn.discordapp.com/emojis/${id}.png?v=1)`
-  );
+let giantRegex = null;
+const itemMap = {};
+
+fetch('/images.json')
+  .then(r => r.json())
+  .then(data => {
+    for (const [name, url] of Object.entries(data)) {
+      const norm = name.toLowerCase().replace(/[^a-z0-9]/g, '').replace(/s$/, '');
+      itemMap[norm] = { name, url };
+    }
+    
+    // Build a giant alternating regex of all item names, sorted by length descending
+    const sortedItems = Object.keys(data).sort((a, b) => b.length - a.length);
+    const escapedNames = sortedItems.map(n => {
+      let escaped = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Replace literal spaces or escaped hyphens with a flexible matcher: space, hyphen, or nothing
+      return escaped.replace(/( |\\-)/g, '[- ]?');
+    });
+    giantRegex = new RegExp(`\\b(${escapedNames.join('|')})s?\\b`, 'gi');
+  })
+  .catch(() => {});
+
+const parseEmojis = (text) => {
+  // Clean up LLM hallucinations where it wraps standard HTML-like emojis in backticks
+  let cleaned = text.replace(/`(<a?:[a-zA-Z0-9_]+:\d+>[^`]*)`/g, "$1");
+  
+  cleaned = cleaned.replace(/<(a?):([a-zA-Z0-9_]+):(\d+)>/g, (_, isAnimated, name, id) => {
+    const ext = isAnimated === 'a' ? 'gif' : 'png';
+    return `![${name}](https://cdn.discordapp.com/emojis/${id}.${ext}?v=1)`;
+  });
+
+  if (giantRegex) {
+    // Inject missing images using substring search for known items inside wrapped terms
+    cleaned = cleaned.replace(/(!\[.*?\]\(.*?\)\s*)?(\*\*|\*)([^*`\n]+)\2/g, (match, existingImg, wrapper, term) => {
+      if (existingImg || term.includes('![')) return match; 
+      
+      const newTerm = term.replace(giantRegex, (innerMatch, capturedName) => {
+        const normName = capturedName.toLowerCase().replace(/[^a-z0-9]/g, '').replace(/s$/, '');
+        const item = itemMap[normName];
+        if (item) {
+          return `![${item.name}](${item.url}) ${innerMatch}`;
+        }
+        return innerMatch;
+      });
+      
+      return `${wrapper}${newTerm}${wrapper}`;
+    });
+  }
+  
+  return cleaned;
+};
 
 const mdComponents = {
-  img: ({ node, ...props }) => (
-    <img {...props} style={{ display: 'inline', width: 20, height: 20, verticalAlign: 'middle', margin: '0 2px' }} />
-  ),
+  img: ({ node, src, ...props }) => {
+    let optimizedSrc = src;
+    if (src && src.includes('cdn.discordapp.com/emojis/')) {
+      const baseUrl = src.split('?')[0];
+      if (baseUrl.endsWith('.gif')) {
+        optimizedSrc = baseUrl.replace('.gif', '.webp') + '?animated=true';
+      } else if (baseUrl.endsWith('.png')) {
+        optimizedSrc = baseUrl.replace('.png', '.webp') + '?animated=false&size=44';
+      }
+    }
+    return (
+      <img src={optimizedSrc} {...props} style={{ display: 'inline', width: 22, height: 22, verticalAlign: 'middle', margin: '0 4px' }} />
+    );
+  },
   code: ({ node, className, children, ...props }) => {
     const match = /language-(\w+)/.exec(className || '');
     // If it has a language class or contains newlines, treat it as a block
@@ -174,12 +320,22 @@ export default function App() {
       payloadMessages = [...contextToUse, { role: 'user', content: question }];
     }
 
-    // Always append to visual UI chat history
-    setMessages(prev => [...prev, {
-      role: 'user',
-      content: question,
-      replyTo: contextToUse ? contextToUse[1].content : null
-    }]);
+    // Always append to visual UI chat history with an empty assistant message for streaming
+    setMessages(prev => [
+      ...prev,
+      {
+        role: 'user',
+        content: question,
+        replyTo: contextToUse ? contextToUse[1].content : null
+      },
+      {
+        role: 'assistant',
+        content: '',
+        statusLogs: [],
+        contextDocs: null,
+        isStreaming: true
+      }
+    ]);
     setInput('');
     setIsLoading(true);
     setIsWakingUp(false);
@@ -200,8 +356,8 @@ export default function App() {
       clearTimeout(wakeupTimer);
       setIsWakingUp(false);
 
-      let errorMessage = `Server error (${response.status})`;
       if (!response.ok) {
+        let errorMessage = `Server error (${response.status})`;
         if (response.status === 502 || response.status === 503 || response.status === 504) {
           errorMessage = "The backend is waking up from sleep. Please wait a moment and try again.";
         } else {
@@ -213,8 +369,59 @@ export default function App() {
         throw new Error(errorMessage);
       }
 
-      const data = await response.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.response, tokens: data.tokens, model: data.model }]);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      let buffer = '';
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop(); // Keep the last incomplete line in buffer
+
+          for (const line of lines) {
+            if (line.trim() === '') continue;
+            try {
+              const data = JSON.parse(line);
+              setMessages(prev => {
+                const newMessages = [...prev];
+                const lastIdx = newMessages.length - 1;
+                const lastMsg = { ...newMessages[lastIdx] };
+
+                if (data.type === 'status') {
+                  lastMsg.statusLogs = [...(lastMsg.statusLogs || []), data.message];
+                } else if (data.type === 'context') {
+                  lastMsg.contextDocs = { official: data.official, community: data.community };
+                } else if (data.type === 'chunk') {
+                  lastMsg.content += data.content;
+                } else if (data.type === 'metadata') {
+                  lastMsg.model = data.model;
+                  lastMsg.tokens = data.tokens;
+                } else if (data.type === 'error') {
+                  lastMsg.content += `\n\n**Error:** ${data.message}`;
+                  lastMsg.isError = true;
+                }
+                newMessages[lastIdx] = lastMsg;
+                return newMessages;
+              });
+            } catch (e) {
+              console.error('Error parsing stream line:', line, e);
+            }
+          }
+        }
+      }
+
+      // When done, mark streaming as false
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastIdx = newMessages.length - 1;
+        newMessages[lastIdx] = { ...newMessages[lastIdx], isStreaming: false };
+        return newMessages;
+      });
+
     } catch (error) {
       clearTimeout(wakeupTimer);
       setIsWakingUp(false);
@@ -224,11 +431,17 @@ export default function App() {
         displayError = "The server is currently waking up or unavailable. Please wait a moment and try again.";
       }
 
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `**Error:** ${displayError}`,
-        isError: true,
-      }]);
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastIdx = newMessages.length - 1;
+        newMessages[lastIdx] = {
+          ...newMessages[lastIdx],
+          content: newMessages[lastIdx].content + `\n\n**Error:** ${displayError}`,
+          isError: true,
+          isStreaming: false
+        };
+        return newMessages;
+      });
     } finally {
       setIsLoading(false);
       clearTimeout(wakeupTimer);
@@ -325,12 +538,18 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="assistant-content">
-                    <div className="prose">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                        {parseEmojis(msg.content)}
-                      </ReactMarkdown>
-                    </div>
-                    {!msg.isError && (
+                    {(msg.statusLogs?.length > 0 || msg.contextDocs) && (
+                      <ThoughtProcessBlock msg={msg} />
+                    )}
+
+                    {msg.content === '' && msg.statusLogs?.length > 0 ? null : (
+                      <div className="prose message-anim-in">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                          {parseEmojis(msg.content)}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                    {!msg.isError && msg.content && !msg.isStreaming && (
                       <MessageActions
                         content={msg.content}
                         onRegenerate={handleRegenerate}
@@ -347,7 +566,7 @@ export default function App() {
           })}
 
           {/* Loading */}
-          {isLoading && (
+          {isLoading && (!messages[messages.length - 1] || messages[messages.length - 1].role !== 'assistant') && (
             <div className="message message--assistant">
               <div className="assistant-content">
                 <TypingIndicator />
