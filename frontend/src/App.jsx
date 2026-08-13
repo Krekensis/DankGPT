@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Analytics } from '@vercel/analytics/react';
 
 // ─── SVG Icon Components ──────────────────────────────────────────────────────
 
@@ -617,6 +618,7 @@ export default function App() {
           <p className="disclaimer">AI can make mistakes. Check important information.</p>
         </div>
       </div>
+      <Analytics />
     </div>
   );
 }
