@@ -464,6 +464,18 @@ body {
   color: var(--text-2);
 }
 
+.model-tokens-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-3);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 4px 8px;
+  margin-left: auto;
+  cursor: default;
+}
+
 /* ─── Typing Indicator ───────────────────────────────────────────────────────── */
 .typing-indicator {
   display: flex;
@@ -672,8 +684,15 @@ body {
     padding: 12px 16px 16px;
   }
 
-  .hide-on-mobile {
-    display: none;
+  .msg-actions {
+    flex-wrap: wrap;
+  }
+
+  .model-tokens-info {
+    margin-left: 0;
+    flex-basis: 100%;
+    margin-bottom: 4px;
+    order: -1;
   }
 }
 

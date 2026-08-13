@@ -87,12 +87,12 @@ function MessageActions({ content, onRegenerate, onReply, isLast, tokens, model 
         </button>
       )}
       {(model || tokens) && (
-        <div className="msg-action-btn" style={{ marginLeft: 'auto', cursor: 'default' }} title="Model & Tokens">
+        <div className="model-tokens-info" title="Model & Tokens">
           <LlamaIcon />
           <span>
             {model ? (model.includes('70b') ? 'llama-70b' : 'llama-8b') : ''}
             {model && tokens ? ' - ' : ''}
-            {tokens ? <>{tokens.toLocaleString()}<span className="hide-on-mobile"> tokens</span></> : ''}
+            {tokens ? <>{tokens.toLocaleString()} tokens</> : ''}
           </span>
         </div>
       )}
